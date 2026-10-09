@@ -1,0 +1,21 @@
+# datos reales del negocio y configuración local: NUNCA se suben
+datos/
+config.json
+servidor.log
+*.tmp
+
+# Python
+__pycache__/
+*.pyc
+
+# empaquetado (se genera con construir_instalador.bat)
+empaquetar/build/
+empaquetar/dist/
+empaquetar/salida/
+
+# herramientas
+.claude/
+.vscode/
+
+# copia vieja de img/ (la web usa ../img/)
+servicioweb/img/

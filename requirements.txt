@@ -1,0 +1,4 @@
+pyserial
+pywin32
+Pillow
+pystray

@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="es" data-tema="claro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>La Verdulería de Margarita · Panel</title>
+  <link rel="icon" type="image/png" href="../img/icono_64.png">
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+<div id="app"><div class="cargando-inicial">Cargando panel…</div></div>
+
+<script type="text/x-template" id="tpl">
+<div class="contenedor" :class="{ 'menu-abierto': menuAbierto }">
+  <aside class="lateral">
+    <div class="marca">
+      <img src="../img/icono.png" alt="">
+      <div>
+        <strong>{{ info.negocio.nombre }}</strong>
+        <small>{{ info.negocio.linea1 || 'Panel de gestión' }}</small>
+      </div>
+    </div>
+    <nav>
+      <button v-for="s in secciones" :key="s.id" :class="{ activo: seccion === s.id }" @click="ir(s.id)">
+        <svg viewBox="0 0 24 24" class="ico" v-html="s.icono"></svg>{{ s.nombre }}
+        <span v-if="s.id === 'stock' && aReponer" class="globo">{{ aReponer }}</span>
+      </button>
+    </nav>
+    <div class="pie-lateral">
+      <label>Tema
+        <select v-model="tema">
+          <option value="claro">Claro</option>
+          <option value="gris">Gris</option>
+          <option value="oscuro">Oscuro</option>
+        </select>
+      </label>
+      <small>El POS se usa desde el programa de escritorio.</small>
+    </div>
+  </aside>
+  <div class="velo" @click="menuAbierto = false"></div>
+
+  <main>
+    <header class="barra">
+      <button class="hamburguesa" @click="menuAbierto = !menuAbierto" aria-label="Menú">☰</button>
+      <h1>{{ seccionActual.nombre }}</h1>
+      <div class="periodo" v-if="seccionActual.periodo">
+        <div class="presets">
+          <button v-for="p in presets" :key="p.id" :class="{ activo: preset === p.id }" @click="elegirPreset(p.id)">{{ p.nombre }}</button>
+        </div>
+        <div class="fechas">
+          <input type="date" v-model="desde" @change="fechaManual">
+          <span>a</span>
+          <input type="date" v-model="hasta" @change="fechaManual">
+        </div>
+      </div>
+      <button class="btn secundario" @click="cargar" :disabled="cargando">{{ cargando ? 'Cargando…' : 'Actualizar' }}</button>
+    </header>
+
+    <div v-if="error" class="alerta">{{ error }}</div>
+
+    <!-- ============================================================ BALANCE -->
+    <section v-if="seccion === 'resumen' && res">
+      <div class="kpis">
+        <div class="kpi destacado">
+          <span>Ventas</span><b>{{ plata(res.ventas_total) }}</b>
+          <small>{{ res.ventas_cantidad }} ventas · ticket promedio {{ plata(res.ticket_promedio) }}</small>
+        </div>
+        <div class="kpi">
+          <span>Ganancia bruta</span><b class="pos">{{ plata(res.ganancia) }}</b>
+          <small>margen {{ n1(res.margen) }}% sobre ventas</small>
+        </div>
+        <div class="kpi">
+          <span>Resultado del período</span><b :class="res.resultado >= 0 ? 'pos' : 'neg'">{{ plata(res.resultado) }}</b>
+          <small>ganancia + otros ingresos − gastos</small>
+        </div>
+        <div class="kpi">
+          <span>Efectivo en caja</span><b>{{ plata(res.efectivo) }}</b>
+          <small>ventas en efectivo ± movimientos</small>
+        </div>
+      </div>
+
+      <div class="grilla-2">
+        <div class="tarjeta ancha">
+          <div class="tarjeta-titulo">
+            <h3>Ventas y ganancia por {{ graf.unidad }}</h3>
+            <div class="leyenda"><i class="l-v"></i>Ventas <i class="l-g"></i>Ganancia</div>
+          </div>
+          <svg class="grafico" :viewBox="'0 0 ' + G.W + ' ' + G.H" preserveAspectRatio="none" role="img" aria-label="Gráfico de ventas">
+            <g v-for="t in graf.ticks" :key="'t' + t.y">
+              <line :x1="G.izq" :x2="G.W - G.der" :y1="t.y" :y2="t.y" class="g-linea"></line>
+              <text :x="G.izq - 8" :y="t.y + 4" class="g-eje" text-anchor="end">{{ t.txt }}</text>
+            </g>
+            <g v-for="b in graf.barras" :key="b.clave">
+              <rect :x="b.x" :y="b.yV" :width="b.w" :height="b.hV" class="g-v" rx="2"><title>{{ b.titulo }}</title></rect>
+              <rect :x="b.x + b.w * 0.2" :y="b.yG" :width="b.w * 0.6" :height="b.hG" class="g-g" rx="2"><title>{{ b.titulo }}</title></rect>
+              <text v-if="b.etiqueta" :x="b.x + b.w / 2" :y="G.H - 8" class="g-eje" text-anchor="middle">{{ b.etiqueta }}</text>
+            </g>
+          </svg>
+          <p v-if="!res.ventas_cantidad" class="vacio">No hay ventas en el período.</p>
+        </div>
+
+        <div class="tarjeta">
+          <h3>Estado de resultados</h3>
+          <table class="resultados">
+            <tr><td>Ventas</td><td>{{ plata(res.ventas_total) }}</td></tr>
+            <tr><td>− Costo de la mercadería vendida</td><td class="neg">−{{ plata(res.costo) }}</td></tr>
+            <tr class="sub"><td>Ganancia bruta</td><td>{{ plata(res.ganancia) }}</td></tr>
+            <tr><td>+ Otros ingresos</td><td class="pos">{{ plata(res.ingresos) }}</td></tr>
+            <tr><td>− Gastos (egresos sin compras)</td><td class="neg">−{{ plata(res.gastos) }}</td></tr>
+            <tr class="total"><td>Resultado</td><td :class="res.resultado >= 0 ? 'pos' : 'neg'">{{ plata(res.resultado) }}</td></tr>
+          </table>
+          <h3 class="mt">Flujo de caja</h3>
+          <table class="resultados">
+            <tr><td>Entró por ventas</td><td>{{ plata(res.ventas_total) }}</td></tr>
+            <tr><td>Otros ingresos</td><td>{{ plata(res.ingresos) }}</td></tr>
+            <tr><td>Compras de mercadería</td><td class="neg">−{{ plata(res.compras) }}</td></tr>
+            <tr><td>Otros egresos</td><td class="neg">−{{ plata(res.gastos) }}</td></tr>
+            <tr class="total"><td>Balance de caja</td><td :class="res.balance >= 0 ? 'pos' : 'neg'">{{ plata(res.balance) }}</td></tr>
+          </table>
+        </div>
+
+        <div class="tarjeta">
+          <h3>Medios de pago</h3>
+          <div v-for="m in res.medios" :key="m.medio" class="barra-h">
+            <div class="barra-h-txt"><span>{{ m.medio }}</span><b>{{ plata(m.total) }}</b><small>{{ pct(m.total, res.ventas_total) }}%</small></div>
+            <div class="barra-h-fondo"><div class="barra-h-relleno" :style="{ width: pct(m.total, res.ventas_total) + '%' }"></div></div>
+          </div>
+          <p v-if="!res.medios.length" class="vacio">Sin ventas.</p>
+          <h3 class="mt">Ventas por hora</h3>
+          <div class="horas">
+            <div v-for="h in horas" :key="h.hora" class="hora" :title="h.hora + ':00 — ' + plata(h.ventas) + ' (' + h.cantidad + ' ventas)'">
+              <div class="hora-barra" :style="{ height: h.alto + '%' }"></div>
+              <small>{{ h.hora }}</small>
+            </div>
+          </div>
+          <p v-if="!horas.length" class="vacio">Sin ventas.</p>
+        </div>
+      </div>
+
+      <div class="kpis chicas">
+        <div class="kpi"><span>Costo mercadería vendida</span><b>{{ plata(res.costo) }}</b></div>
+        <div class="kpi"><span>Egresos totales</span><b class="neg">{{ plata(res.egresos) }}</b></div>
+        <div class="kpi"><span>Otros ingresos</span><b>{{ plata(res.ingresos) }}</b></div>
+        <div class="kpi"><span>Stock valorizado (costo)</span><b>{{ plata(res.stock_valorizado) }}</b></div>
+        <div class="kpi" :class="{ alerta_kpi: res.stock_bajo }" @click="ir('stock'); soloReponer = true" style="cursor:pointer">
+          <span>Productos a reponer</span><b>{{ res.stock_bajo }}</b></div>
+        <div class="kpi"><span>Ventas anuladas</span><b>{{ res.anuladas }}</b></div>
+      </div>
+
+      <div class="tarjeta">
+        <div class="tarjeta-titulo"><h3>Rentabilidad por producto</h3><small>{{ res.productos.length }} productos vendidos</small></div>
+        <div class="tabla-cont">
+          <table class="tabla">
+            <thead><tr>
+              <th v-for="c in colsRent" :key="c.k" :class="c.cls" @click="ordenar(ordenRent, c.k)">{{ c.t }}<span v-if="ordenRent.campo === c.k">{{ ordenRent.asc ? ' ▲' : ' ▼' }}</span></th>
+            </tr></thead>
+            <tbody>
+              <tr v-for="p in rentabilidad" :key="p.codigo">
+                <td class="con-ico"><img :src="ico(p.icono_ver)" alt="">{{ p.nombre }}</td>
+                <td class="num">{{ cant(p.cantidad, p.pesable) }}</td>
+                <td class="num">{{ plata(p.importe) }}</td>
+                <td class="num">{{ plata(p.costo) }}</td>
+                <td class="num pos">{{ plata(p.ganancia) }}</td>
+                <td class="num">{{ p.margen === null ? '-' : n1(p.margen) + '%' }}</td>
+                <td class="num">{{ pct(p.importe, res.ventas_total) }}%</td>
+              </tr>
+              <tr v-if="!rentabilidad.length"><td colspan="7" class="vacio">Sin ventas en el período.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ VENTAS -->
+    <section v-if="seccion === 'ventas'">
+      <div class="filtros">
+        <input type="search" v-model="fv.texto" placeholder="Buscar producto o N° de ticket…">
+        <select v-model="fv.estado"><option value="">Todas</option><option value="activa">Activas</option><option value="anulada">Anuladas</option></select>
+        <select v-model="fv.medio"><option value="">Todos los medios</option><option v-for="m in medios" :key="m">{{ m }}</option></select>
+        <span class="espacio"></span>
+        <span class="resumen-filtro">{{ ventasFiltradas.length }} ventas · <b>{{ plata(totalFiltrado) }}</b></span>
+        <button class="btn secundario" @click="exportarVentas">Exportar CSV</button>
+      </div>
+      <div class="tarjeta sin-relleno">
+        <div class="tabla-cont alta">
+          <table class="tabla clicable">
+            <thead><tr><th>N°</th><th>Fecha</th><th>Hora</th><th>Detalle</th><th>Medio</th><th class="num">Total</th><th class="num">Ganancia</th><th>Estado</th></tr></thead>
+            <tbody>
+              <tr v-for="v in ventasFiltradas" :key="v.numero" @click="verVenta(v)" :class="{ anulada: v.estado === 'anulada' }">
+                <td>#{{ v.numero }}</td>
+                <td>{{ fecha(v.fecha) }}</td>
+                <td>{{ v.fecha.slice(11, 16) }}</td>
+                <td class="detalle">{{ v.items.map(i => i.nombre + ' ' + cant(i.cantidad, i.pesable)).join(', ') }}</td>
+                <td>{{ v.pago.medio }}</td>
+                <td class="num">{{ plata(v.total) }}</td>
+                <td class="num">{{ plata(v.total - (v.costo_total || 0)) }}</td>
+                <td><span class="chip" :class="v.estado">{{ v.estado === 'anulada' ? 'Anulada' : 'OK' }}</span></td>
+              </tr>
+              <tr v-if="!ventasFiltradas.length"><td colspan="8" class="vacio">No hay ventas.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ CAJA -->
+    <section v-if="seccion === 'caja' && res">
+      <div class="kpis">
+        <div class="kpi"><span>Ventas</span><b>{{ plata(res.ventas_total) }}</b><small>{{ res.ventas_cantidad }} ventas</small></div>
+        <div class="kpi"><span>Otros ingresos</span><b class="pos">{{ plata(res.ingresos) }}</b></div>
+        <div class="kpi"><span>Egresos</span><b class="neg">{{ plata(res.egresos) }}</b><small>compras {{ plata(res.compras) }} · gastos {{ plata(res.gastos) }}</small></div>
+        <div class="kpi destacado"><span>Balance de caja</span><b>{{ plata(res.balance) }}</b><small>efectivo: {{ plata(res.efectivo) }}</small></div>
+      </div>
+      <div class="filtros">
+        <button class="btn" @click="abrirMovimiento('ingreso')">+ Ingreso</button>
+        <button class="btn peligro" @click="abrirMovimiento('egreso')">− Egreso</button>
+        <span class="espacio"></span>
+        <select v-model="fm"><option value="">Ingresos y egresos</option><option value="ingreso">Solo ingresos</option><option value="egreso">Solo egresos</option></select>
+      </div>
+      <div class="grilla-2">
+        <div class="tarjeta sin-relleno ancha">
+          <div class="tabla-cont alta">
+            <table class="tabla">
+              <thead><tr><th>Fecha</th><th>Hora</th><th>Tipo</th><th>Concepto</th><th>Medio</th><th class="num">Monto</th></tr></thead>
+              <tbody>
+                <tr v-for="m in movsFiltrados" :key="m.fecha + m.id">
+                  <td>{{ fecha(m.fecha) }}</td><td>{{ m.fecha.slice(11, 16) }}</td>
+                  <td><span class="chip" :class="m.tipo">{{ m.tipo === 'ingreso' ? 'Ingreso' : 'Egreso' }}</span></td>
+                  <td>{{ m.concepto }}</td><td>{{ m.medio }}</td>
+                  <td class="num" :class="m.tipo === 'egreso' ? 'neg' : 'pos'">{{ m.tipo === 'egreso' ? '−' : '+' }}{{ plata(m.monto) }}</td>
+                </tr>
+                <tr v-if="!movsFiltrados.length"><td colspan="6" class="vacio">No hay movimientos en el período.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="tarjeta">
+          <h3>Egresos por concepto</h3>
+          <div v-for="e in res.egresos_concepto" :key="e.concepto" class="barra-h">
+            <div class="barra-h-txt"><span>{{ e.concepto }}</span><b>{{ plata(e.total) }}</b><small>{{ pct(e.total, res.egresos) }}%</small></div>
+            <div class="barra-h-fondo"><div class="barra-h-relleno rojo" :style="{ width: pct(e.total, res.egresos) + '%' }"></div></div>
+          </div>
+          <p v-if="!res.egresos_concepto.length" class="vacio">Sin egresos.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ PRODUCTOS -->
+    <section v-if="seccion === 'productos'">
+      <div class="filtros">
+        <input type="search" v-model="fp" placeholder="Buscar producto o código…">
+        <label class="check"><input type="checkbox" v-model="verInactivos"> Ver inactivos</label>
+        <span class="espacio"></span>
+        <button class="btn secundario" @click="abrirAumento">Actualizar precios %</button>
+        <button class="btn" @click="abrirProducto(null)">+ Nuevo producto</button>
+      </div>
+      <div class="tarjeta sin-relleno">
+        <div class="tabla-cont alta">
+          <table class="tabla clicable">
+            <thead><tr>
+              <th v-for="c in colsProd" :key="c.k" :class="c.cls" @click="ordenar(ordenProd, c.k)">{{ c.t }}<span v-if="ordenProd.campo === c.k">{{ ordenProd.asc ? ' ▲' : ' ▼' }}</span></th>
+            </tr></thead>
+            <tbody>
+              <tr v-for="p in productosFiltrados" :key="p.codigo" @click="abrirProducto(p)" :class="{ anulada: !p.activo }">
+                <td>{{ p.codigo }}</td>
+                <td class="con-ico"><img :src="ico(p.icono_ver)" alt="">{{ p.nombre }}</td>
+                <td>{{ p.pesable ? 'por kg' : 'unidad' }}</td>
+                <td class="num">{{ plata(p.precio) }}</td>
+                <td class="num">{{ plata(p.costo) }}</td>
+                <td class="num pos">{{ plata(p.precio - p.costo) }}</td>
+                <td class="num"><span class="chip" :class="claseMargen(p.margen)">{{ p.margen === null ? '-' : n1(p.margen) + '%' }}</span></td>
+                <td class="num">{{ cant(p.stock, p.pesable) }}</td>
+                <td>{{ p.activo ? 'Sí' : 'No' }}</td>
+              </tr>
+              <tr v-if="!productosFiltrados.length"><td colspan="9" class="vacio">No hay productos.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ STOCK -->
+    <section v-if="seccion === 'stock'">
+      <div class="kpis">
+        <div class="kpi"><span>Productos</span><b>{{ productos.length }}</b></div>
+        <div class="kpi"><span>Stock valorizado (costo)</span><b>{{ plata(stockValorizado) }}</b></div>
+        <div class="kpi"><span>Valor a precio de venta</span><b>{{ plata(stockVenta) }}</b></div>
+        <div class="kpi" :class="{ alerta_kpi: aReponer }"><span>A reponer</span><b>{{ aReponer }}</b></div>
+      </div>
+      <div class="filtros">
+        <input type="search" v-model="fp" placeholder="Buscar producto…">
+        <label class="check"><input type="checkbox" v-model="soloReponer"> Solo a reponer</label>
+      </div>
+      <div class="tarjeta sin-relleno">
+        <div class="tabla-cont">
+          <table class="tabla">
+            <thead><tr><th>Producto</th><th class="num">Stock</th><th class="num">Mínimo</th><th class="num">Costo</th><th class="num">Valorizado</th><th>Estado</th><th></th></tr></thead>
+            <tbody>
+              <tr v-for="p in stockFiltrado" :key="p.codigo" :class="{ bajo: p.stock <= p.stock_min }">
+                <td class="con-ico"><img :src="ico(p.icono_ver)" alt="">{{ p.nombre }}</td>
+                <td class="num">{{ cant(p.stock, p.pesable) }}</td>
+                <td class="num">{{ cant(p.stock_min, p.pesable) }}</td>
+                <td class="num">{{ plata(p.costo) }}</td>
+                <td class="num">{{ plata(Math.max(p.stock, 0) * p.costo) }}</td>
+                <td><span class="chip" :class="p.stock <= p.stock_min ? 'anulada' : 'activa'">{{ p.stock <= p.stock_min ? 'Reponer' : 'OK' }}</span></td>
+                <td class="acciones">
+                  <button class="btn chico" @click="abrirIngreso(p)">+ Ingreso</button>
+                  <button class="btn chico secundario" @click="abrirAjuste(p)">Ajuste</button>
+                </td>
+              </tr>
+              <tr v-if="!stockFiltrado.length"><td colspan="7" class="vacio">Nada para mostrar.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="tarjeta sin-relleno">
+        <div class="tarjeta-titulo con-relleno"><h3>Últimos movimientos de stock</h3></div>
+        <div class="tabla-cont">
+          <table class="tabla">
+            <thead><tr><th>Fecha</th><th>Producto</th><th>Motivo</th><th class="num">Cantidad</th><th class="num">Stock final</th></tr></thead>
+            <tbody>
+              <tr v-for="(h, i) in historial" :key="i">
+                <td>{{ fecha(h.fecha) }} {{ h.fecha.slice(11, 16) }}</td><td>{{ h.nombre }}</td><td>{{ h.motivo }}</td>
+                <td class="num" :class="h.cantidad < 0 ? 'neg' : 'pos'">{{ h.cantidad > 0 ? '+' : '' }}{{ n3(h.cantidad) }}</td>
+                <td class="num">{{ n3(h.stock) }}</td>
+              </tr>
+              <tr v-if="!historial.length"><td colspan="5" class="vacio">Sin movimientos.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============================================================ MODALES -->
+  <div v-if="modal" class="modal-fondo" @mousedown.self="cerrarModal">
+    <div class="modal" :class="{ ancho: modal.tipo === 'venta' }" @keydown.esc="cerrarModal">
+
+      <template v-if="modal.tipo === 'venta'">
+        <h2>Venta #{{ modal.venta.numero }} <span class="chip" :class="modal.venta.estado">{{ modal.venta.estado === 'anulada' ? 'Anulada' : 'Activa' }}</span></h2>
+        <div class="venta-detalle">
+          <div>
+            <p class="dato">{{ fecha(modal.venta.fecha) }} {{ modal.venta.fecha.slice(11, 16) }} · {{ modal.venta.pago.medio }}
+              <template v-if="modal.venta.pago.paga_con"> · pagó con {{ plata(modal.venta.pago.paga_con) }}, vuelto {{ plata(modal.venta.pago.vuelto) }}</template></p>
+            <table class="tabla">
+              <thead><tr><th>Producto</th><th class="num">Cantidad</th><th class="num">Precio</th><th class="num">Importe</th></tr></thead>
+              <tbody><tr v-for="(i, k) in modal.venta.items" :key="k">
+                <td>{{ i.nombre }}</td><td class="num">{{ cant(i.cantidad, i.pesable) }}</td><td class="num">{{ plata(i.precio) }}</td><td class="num">{{ plata(i.importe) }}</td>
+              </tr></tbody>
+              <tfoot>
+                <tr><td colspan="3">Total</td><td class="num"><b>{{ plata(modal.venta.total) }}</b></td></tr>
+                <tr><td colspan="3">Costo / ganancia</td><td class="num">{{ plata(modal.venta.costo_total || 0) }} / <span class="pos">{{ plata(modal.venta.total - (modal.venta.costo_total || 0)) }}</span></td></tr>
+              </tfoot>
+            </table>
+            <p v-if="modal.venta.anulacion" class="alerta">Anulada el {{ fecha(modal.venta.anulacion.fecha) }} {{ modal.venta.anulacion.fecha.slice(11, 16) }}: {{ modal.venta.anulacion.motivo }}</p>
+          </div>
+          <div class="ticket"><img :src="urlTicket(modal.venta)" alt="Ticket"></div>
+        </div>
+        <div class="botones">
+          <button v-if="modal.venta.estado !== 'anulada'" class="btn peligro" @click="anular(modal.venta)" :disabled="guardando">Anular venta</button>
+          <span class="espacio"></span>
+          <button class="btn secundario" @click="cerrarModal">Cerrar</button>
+        </div>
+      </template>
+
+      <template v-if="modal.tipo === 'producto'">
+        <h2>{{ modal.original ? 'Editar producto' : 'Nuevo producto' }}</h2>
+        <form @submit.prevent="guardarProducto" class="form">
+          <label>Código <input v-model="form.codigo" placeholder="automático"></label>
+          <label>Nombre <input v-model="form.nombre" required ref="primero"></label>
+          <label>Precio de venta $ <input v-model.number="form.precio" type="number" step="0.01" min="0" required></label>
+          <label>Costo $ <input v-model.number="form.costo" type="number" step="0.01" min="0"></label>
+          <label v-if="!modal.original">Stock inicial <input v-model.number="form.stock" type="number" step="0.001"></label>
+          <label>Stock mínimo <input v-model.number="form.stock_min" type="number" step="0.001" min="0"></label>
+          <label class="check"><input type="checkbox" v-model="form.pesable"> Se vende por kg (pesable)</label>
+          <label class="check"><input type="checkbox" v-model="form.activo"> Activo (aparece en el POS)</label>
+          <div class="campo-icono">
+            <span>Ícono</span>
+            <div class="selector-iconos">
+              <button type="button" :class="{ elegido: !form.icono }" @click="form.icono = ''" title="Automático según el nombre">
+                <img :src="ico(iconoAuto)" alt=""><small>Auto</small></button>
+              <button type="button" v-for="i in catalogo" :key="i.cp" :class="{ elegido: form.icono === i.cp }"
+                      @click="form.icono = i.cp" :title="i.nombre"><img :src="ico(i.cp)" alt=""></button>
+            </div>
+          </div>
+          <p class="dato" v-if="form.costo > 0">Ganancia {{ plata(form.precio - form.costo) }} por {{ form.pesable ? 'kg' : 'unidad' }} · margen {{ n1((form.precio - form.costo) / form.costo * 100) }}%</p>
+          <div class="botones">
+            <button v-if="modal.original" type="button" class="btn peligro" @click="eliminarProducto">Eliminar</button>
+            <span class="espacio"></span>
+            <button type="button" class="btn secundario" @click="cerrarModal">Cancelar</button>
+            <button class="btn" :disabled="guardando">Guardar</button>
+          </div>
+        </form>
+      </template>
+
+      <template v-if="modal.tipo === 'aumento'">
+        <h2>Actualizar precios</h2>
+        <form @submit.prevent="aplicarAumento" class="form">
+          <label>Porcentaje (negativo para bajar) <input v-model.number="form.pct" type="number" step="0.1" required ref="primero"></label>
+          <label>Aplicar a
+            <select v-model="form.campo"><option value="precio">Precio de venta</option><option value="costo">Costo</option><option value="ambos">Precio y costo</option></select></label>
+          <label>Redondear precio a
+            <select v-model.number="form.redondeo"><option :value="0">Sin redondeo</option><option :value="10">$10</option><option :value="50">$50</option><option :value="100">$100</option></select></label>
+          <p class="dato">Se van a modificar <b>{{ productosFiltrados.length }}</b> productos (los que se ven en la lista, según la búsqueda).</p>
+          <div class="ejemplos" v-if="productosFiltrados.length">
+            <div v-for="p in productosFiltrados.slice(0, 4)" :key="p.codigo">{{ p.nombre }}: {{ plata(p.precio) }} → <b>{{ plata(nuevoPrecio(p)) }}</b></div>
+          </div>
+          <div class="botones"><span class="espacio"></span>
+            <button type="button" class="btn secundario" @click="cerrarModal">Cancelar</button>
+            <button class="btn" :disabled="guardando || !form.pct">{{ guardando ? 'Aplicando…' : 'Aplicar' }}</button>
+          </div>
+        </form>
+      </template>
+
+      <template v-if="modal.tipo === 'ingreso'">
+        <h2><img class="ico-titulo" :src="ico(modal.p.icono_ver)" alt=""> Ingreso de mercadería · {{ modal.p.nombre }}</h2>
+        <form @submit.prevent="guardarIngreso" class="form">
+          <label>Cantidad ({{ modal.p.pesable ? 'kg' : 'unidades' }}) <input v-model.number="form.cantidad" type="number" step="0.001" min="0.001" required ref="primero"></label>
+          <label>Costo por {{ modal.p.pesable ? 'kg' : 'unidad' }} $ <input v-model.number="form.costo" type="number" step="0.01" min="0"></label>
+          <label class="check"><input type="checkbox" v-model="form.egreso"> Registrar el pago como egreso de caja ({{ plata((form.cantidad || 0) * (form.costo || 0)) }})</label>
+          <label v-if="form.egreso">Pagado con <select v-model="form.medio"><option v-for="m in medios" :key="m">{{ m }}</option></select></label>
+          <div class="botones"><span class="espacio"></span>
+            <button type="button" class="btn secundario" @click="cerrarModal">Cancelar</button>
+            <button class="btn" :disabled="guardando">Guardar</button>
+          </div>
+        </form>
+      </template>
+
+      <template v-if="modal.tipo === 'ajuste'">
+        <h2><img class="ico-titulo" :src="ico(modal.p.icono_ver)" alt=""> Ajuste de stock · {{ modal.p.nombre }}</h2>
+        <form @submit.prevent="guardarAjuste" class="form">
+          <p class="dato">Stock actual: {{ cant(modal.p.stock, modal.p.pesable) }}</p>
+          <label>Stock real contado <input v-model.number="form.stock" type="number" step="0.001" required ref="primero"></label>
+          <label>Motivo <input v-model="form.motivo" placeholder="Merma, rotura, conteo…"></label>
+          <div class="botones"><span class="espacio"></span>
+            <button type="button" class="btn secundario" @click="cerrarModal">Cancelar</button>
+            <button class="btn" :disabled="guardando">Guardar</button>
+          </div>
+        </form>
+      </template>
+
+      <template v-if="modal.tipo === 'movimiento'">
+        <h2>{{ form.tipo === 'ingreso' ? 'Nuevo ingreso de caja' : 'Nuevo egreso de caja' }}</h2>
+        <form @submit.prevent="guardarMovimiento" class="form">
+          <label>Concepto <input v-model="form.concepto" required ref="primero" placeholder="Ej: bolsas, luz, flete, aporte…"></label>
+          <label>Monto $ <input v-model.number="form.monto" type="number" step="0.01" min="0.01" required></label>
+          <label>Medio <select v-model="form.medio"><option v-for="m in medios" :key="m">{{ m }}</option></select></label>
+          <p class="dato">Se registra con la fecha y hora de ahora.</p>
+          <div class="botones"><span class="espacio"></span>
+            <button type="button" class="btn secundario" @click="cerrarModal">Cancelar</button>
+            <button class="btn" :class="{ peligro: form.tipo === 'egreso' }" :disabled="guardando">Guardar</button>
+          </div>
+        </form>
+      </template>
+    </div>
+  </div>
+
+  <div v-if="aviso" class="aviso">{{ aviso }}</div>
+</div>
+</script>
+
+<!-- Vue: primero busca la copia local (vendor/), si no está la baja de internet -->
+<script src="vendor/vue.global.prod.js" onerror="this.remove()"></script>
+<script>window.Vue || document.write('<script src="https://cdn.jsdelivr.net/npm/vue@3.4.38/dist/vue.global.prod.js"><\/script>')</script>
+<script src="app.js"></script>
+</body>
+</html>

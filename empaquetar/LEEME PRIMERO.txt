@@ -1,0 +1,24 @@
+LA VERDULERÍA DE MARGARITA - versión {version}
+Sistema de gestión para verdulería: POS con balanza, tickets, stock, caja y panel web.
+Desarrollado por Fernando S. Brandolini - eRios
+
+CÓMO INSTALAR (2 minutos)
+-------------------------
+1. Hacé doble clic en  Instalar_VerduleriaMargarita_{version}.exe
+2. Si aparece "Windows protegió su PC":  Más información  ->  Ejecutar de todas formas
+3. Si Windows pregunta si permitís cambios:  Sí
+4. Siguiente -> Siguiente -> Instalar -> Finalizar
+
+Listo: en el escritorio quedan dos íconos con el logo:
+  * La Verdulería de Margarita              -> el POS (vender, pesar, cobrar)
+  * La Verdulería de Margarita - Servicio web -> el panel (balance, ventas, caja, stock)
+
+Todo está explicado con imágenes en:  Manual - La Verdulería de Margarita.pdf
+
+TUS DATOS
+---------
+Se guardan en  C:\VerduleriaMargarita\datos
+Para hacer backup, copiá esa carpeta (y el archivo config.json) a un pendrive.
+Al desinstalar o actualizar, los datos NO se borran.
+
+Más información: https://github.com/fersbrando/margaria_verduleria

@@ -1,0 +1,4 @@
+Íconos: Twemoji 14.0.2 — © Twitter, Inc. y otros colaboradores.
+Licencia CC-BY 4.0: https://creativecommons.org/licenses/by/4.0/
+Origen: https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/
+Se bajan con: python iconos.py
